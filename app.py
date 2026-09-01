@@ -16,7 +16,7 @@ st.set_page_config(
     page_title="IPO Intelligence",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ---------- UI styling ----------
@@ -242,33 +242,71 @@ def get_selected_ipo(source_id):
         db.close()
 
 
-# ---------- Header ----------
+# ---------- Sidebar navigation ----------
 
-head_left, head_right = st.columns([6, 1])
-with head_left:
-    st.title("IPO Intelligence")
-    st.caption("Discover IPOs, evaluate demand, and get an AI view on whether an IPO is worth considering.")
-with head_right:
-    if st.button("Refresh data", type="primary", use_container_width=True):
+if "app_view" not in st.session_state:
+    st.session_state["app_view"] = "discovery"
+
+sidebar_pages = ["Discovery", "AI Analyst"]
+if st.session_state.get("selected_ipo"):
+    sidebar_pages.append("IPO Detail")
+
+view_labels = {
+    "discovery": "Discovery",
+    "ai_analyst": "AI Analyst",
+    "ipo_detail": "IPO Detail",
+}
+
+current_label = view_labels.get(st.session_state["app_view"], "Discovery")
+if st.session_state.get("selected_ipo") and current_label not in sidebar_pages:
+    current_label = "IPO Detail"
+
+with st.sidebar:
+    st.markdown("# IPO Intelligence")
+    st.caption("Research, demand, and AI decision support")
+    st.markdown("---")
+
+    selected_page = st.radio(
+        "Pages",
+        sidebar_pages,
+        index=sidebar_pages.index(current_label),
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+
+    if st.button("Refresh data", use_container_width=True):
         with st.spinner("Refreshing IPO data..."):
             try:
                 result = collect_once(enrich=True)
-
-                st.success(
-                    f"Updated {result['count']} IPOs."
-                )
-
+                st.success(f"Updated {result['count']} IPOs.")
                 st.rerun()
-
             except Exception as exc:
-                st.error(
-                    f"Collector error: {exc}"
-                )
+                st.error(f"Collector error: {exc}")
+
+    st.caption("Data is refreshed from the configured IPO sources.")
+
+# Sync sidebar navigation to app state.
+selected_to_state = {
+    "Discovery": "discovery",
+    "AI Analyst": "ai_analyst",
+    "IPO Detail": "ipo_detail",
+}
+new_view = selected_to_state[selected_page]
+if new_view != st.session_state.get("app_view"):
+    st.session_state["app_view"] = new_view
+    if new_view != "ipo_detail":
+        st.session_state.pop("selected_ipo", None)
+
+# ---------- Header ----------
+
+st.title("IPO Intelligence")
+st.caption("Discover IPOs, evaluate demand, and get an AI view on whether an IPO is worth considering.")
 
 
 if not Path(DB_PATH).exists():
     st.info(
-        "No IPO data yet. Click Refresh data."
+        "No IPO data yet. Use Refresh data in the sidebar."
     )
     st.stop()
 
@@ -285,7 +323,7 @@ except Exception as exc:
 
 if df.empty:
     st.info(
-        "No IPOs collected yet. Click Refresh data."
+        "No IPOs collected yet. Use Refresh data in the sidebar."
     )
     st.stop()
 
@@ -305,10 +343,6 @@ if "ai_scores" not in st.session_state:
 
 if "ai_chat_messages" not in st.session_state:
     st.session_state["ai_chat_messages"] = []
-
-if "app_view" not in st.session_state:
-    st.session_state["app_view"] = "discovery"
-
 
 def build_ai_dataset(frame):
     cols = [
@@ -369,30 +403,6 @@ def render_ai_score(score):
     if reason:
         st.caption(reason)
 
-
-def open_discovery():
-    st.session_state["app_view"] = "discovery"
-    st.session_state.pop("selected_ipo", None)
-    st.rerun()
-
-
-def open_ai_analyst():
-    st.session_state["app_view"] = "ai_analyst"
-    st.session_state.pop("selected_ipo", None)
-    st.rerun()
-
-
-# ---------- Navigation ----------
-
-nav1, nav2, nav3 = st.columns([1.2, 1.2, 7.6])
-with nav1:
-    if st.button("Discovery", use_container_width=True,
-                 type="primary" if st.session_state["app_view"] == "discovery" else "secondary"):
-        open_discovery()
-with nav2:
-    if st.button("AI Analyst", use_container_width=True,
-                 type="primary" if st.session_state["app_view"] == "ai_analyst" else "secondary"):
-        open_ai_analyst()
 
 # ---------- AI Analyst page ----------
 
@@ -472,6 +482,7 @@ if selected_id:
                 "selected_ipo",
                 None
             )
+            st.session_state["app_view"] = "discovery"
             st.rerun()
 
         st.markdown("---")
@@ -809,6 +820,7 @@ if selected_id:
                 "selected_ipo",
                 None
             )
+            st.session_state["app_view"] = "discovery"
             st.rerun()
 
     st.stop()
@@ -978,12 +990,7 @@ d.metric(
 )
 
 
-disc_head, disc_action = st.columns([6, 1])
-with disc_head:
-    st.markdown("## IPO Discovery")
-with disc_action:
-    if st.button("Open AI Analyst", use_container_width=True):
-        open_ai_analyst()
+st.markdown("## IPO Discovery")
 
 
 def render_section(title, section_df):
@@ -1025,7 +1032,7 @@ def render_section(title, section_df):
                     st.rerun()
                 if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
                     st.session_state["selected_ipo"] = source_id
-                    st.session_state["app_view"] = "discovery"
+                    st.session_state["app_view"] = "ipo_detail"
                     st.rerun()
 
             if score:
