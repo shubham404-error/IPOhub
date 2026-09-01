@@ -82,7 +82,12 @@ RECOMMENDATION_SCHEMA = {
 
 def analyze_ipos(ipos, objective="Balanced",
                  risk_tolerance="Moderate",
-                 holding_horizon="Listing day"):
+                 holding_horizon="Listing day",
+                 horizon=None):
+    # Backward compatibility with the app UI, which passes `horizon=`.
+    if horizon is not None:
+        holding_horizon = horizon
+
     """Analyze the supplied IPO dataset using Gemini.
 
     The Gemini client is created as a local variable and explicitly closed
