@@ -19,6 +19,60 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ---------- UI styling ----------
+
+st.markdown("""
+<style>
+html, body, [class*="css"] {
+    font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+}
+
+.stApp {
+    background: #0b0d10;
+}
+
+.block-container {
+    max-width: 1440px;
+    padding-top: 1.2rem;
+    padding-bottom: 3rem;
+}
+
+button {
+    font-family: Helvetica Neue, Helvetica, Arial, sans-serif !important;
+}
+
+.ipo-kicker {
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 0.25rem;
+}
+
+.ipo-card-title {
+    font-size: 1.08rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.ipo-card-meta {
+    font-size: 0.82rem;
+    opacity: 0.62;
+}
+
+.ai-score-strip {
+    border-top: 1px solid rgba(255,255,255,0.10);
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+}
+
+div[data-testid="stMetric"] {
+    padding: 0.15rem 0;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 
 # ---------- Formatting ----------
 
@@ -190,19 +244,12 @@ def get_selected_ipo(source_id):
 
 # ---------- Header ----------
 
-st.title("IPO Intelligence")
-st.caption(
-    "Discover IPOs, compare demand, and inspect live subscription and GMP data."
-)
-
-top_left, top_right = st.columns([1, 5])
-
-with top_left:
-    if st.button(
-        "Refresh data",
-        type="primary",
-        use_container_width=True,
-    ):
+head_left, head_right = st.columns([6, 1])
+with head_left:
+    st.title("IPO Intelligence")
+    st.caption("Discover IPOs, evaluate demand, and get an AI view on whether an IPO is worth considering.")
+with head_right:
+    if st.button("Refresh data", type="primary", use_container_width=True):
         with st.spinner("Refreshing IPO data..."):
             try:
                 result = collect_once(enrich=True)
@@ -251,176 +298,158 @@ df["display_status"] = df.apply(
 
 
 
-# ---------- AI Advisor ----------
+# ---------- AI state / helpers ----------
 
-if not st.session_state.get("selected_ipo"):
+if "ai_scores" not in st.session_state:
+    st.session_state["ai_scores"] = {}
 
-    def build_ai_dataset(frame):
-        cols = [
-            "source_id", "company_name", "segment", "display_status",
-            "open_date", "close_date", "price_low", "price_high",
-            "lot_size", "issue_size", "fresh_issue", "ofs_issue",
-            "gmp", "gmp_pct", "indicative_listing", "subscription",
-            "qib", "nii", "snii", "bnii", "retail", "applications",
-            "listing_exchange",
-        ]
-        available = [c for c in cols if c in frame.columns]
-        data = frame[available].copy()
-        return data.where(pd.notna(data), None).to_dict(orient="records")
+if "ai_chat_messages" not in st.session_state:
+    st.session_state["ai_chat_messages"] = []
 
-    if "ai_messages" not in st.session_state:
-        st.session_state["ai_messages"] = []
+if "app_view" not in st.session_state:
+    st.session_state["app_view"] = "discovery"
 
-    with st.expander("AI IPO Advisor", expanded=False):
 
-        st.caption(
-            "Gemini reviews the IPO data currently collected by this app. "
-            "It separates investment attractiveness from allotment attractiveness "
-            "and does not treat GMP as a guarantee."
-        )
+def build_ai_dataset(frame):
+    cols = [
+        "source_id", "company_name", "segment", "display_status",
+        "open_date", "close_date", "price_low", "price_high",
+        "lot_size", "issue_size", "fresh_issue", "ofs_issue",
+        "gmp", "gmp_pct", "indicative_listing", "subscription",
+        "qib", "nii", "snii", "bnii", "retail", "applications",
+        "listing_exchange",
+    ]
+    available = [c for c in cols if c in frame.columns]
+    data = frame[available].copy()
+    return data.where(pd.notna(data), None).to_dict(orient="records")
 
-        api_key_available = bool(get_gemini_api_key())
 
-        if not api_key_available:
-            st.warning(
-                "Gemini API key not configured. Add GEMINI_API_KEY to "
-                "Streamlit secrets or your environment."
+def ai_score_for_ipo(row):
+    """Ask the AI for one IPO only, then store the result in session state."""
+    if not get_gemini_api_key():
+        st.error("AI is not configured yet. Add GEMINI_API_KEY to Streamlit secrets.")
+        return
+
+    dataset = build_ai_dataset(pd.DataFrame([row]))
+    try:
+        with st.spinner("AI is reviewing this IPO..."):
+            result = analyze_ipos(
+                dataset,
+                objective="Balanced",
+                risk_tolerance="Moderate",
+                horizon="Listing day",
             )
+        recommendations = result.get("recommendations", [])
+        if recommendations:
+            st.session_state["ai_scores"][str(row["source_id"])] = recommendations[0]
+    except Exception as exc:
+        st.error(f"AI error: {exc}")
 
-        ai_col1, ai_col2, ai_col3 = st.columns(3)
 
-        with ai_col1:
-            ai_objective = st.selectbox(
-                "What are you optimizing for?",
-                [
-                    "Balanced",
-                    "Listing gains",
-                    "Long-term investment",
-                    "Allotment probability",
-                ],
-                key="ai_objective",
+def render_ai_score(score):
+    if not score:
+        return
+
+    verdict = score.get("verdict", "Insufficient data")
+    investment = score.get("investment_score")
+    allotment = score.get("allotment_score")
+    confidence = score.get("confidence", "Low")
+
+    st.markdown(
+        f"**AI view: {verdict}** · {confidence} confidence"
+    )
+
+    s1, s2 = st.columns(2)
+    with s1:
+        st.metric("Investment", f"{investment}/100" if investment is not None else "—")
+    with s2:
+        st.metric("Allotment", f"{allotment}/100" if allotment is not None else "—")
+
+    reason = clean_text(score.get("reason"))
+    if reason:
+        st.caption(reason)
+
+
+def open_discovery():
+    st.session_state["app_view"] = "discovery"
+    st.session_state.pop("selected_ipo", None)
+    st.rerun()
+
+
+def open_ai_analyst():
+    st.session_state["app_view"] = "ai_analyst"
+    st.session_state.pop("selected_ipo", None)
+    st.rerun()
+
+
+# ---------- Navigation ----------
+
+nav1, nav2, nav3 = st.columns([1.2, 1.2, 7.6])
+with nav1:
+    if st.button("Discovery", use_container_width=True,
+                 type="primary" if st.session_state["app_view"] == "discovery" else "secondary"):
+        open_discovery()
+with nav2:
+    if st.button("AI Analyst", use_container_width=True,
+                 type="primary" if st.session_state["app_view"] == "ai_analyst" else "secondary"):
+        open_ai_analyst()
+
+# ---------- AI Analyst page ----------
+
+if st.session_state["app_view"] == "ai_analyst" and not st.session_state.get("selected_ipo"):
+    st.markdown("## AI Analyst")
+    st.caption("Ask deeper questions about the IPOs currently tracked by IPO Intelligence.")
+
+    if not get_gemini_api_key():
+        st.warning("AI is not configured. Add GEMINI_API_KEY to Streamlit secrets to use the analyst.")
+        st.stop()
+
+    st.markdown("#### Start with a question")
+    prompt_cols = st.columns(4)
+    prompts = [
+        "Which open IPO looks best for listing gains?",
+        "Which IPO has the best risk/reward right now?",
+        "Which IPOs should I avoid and why?",
+        "Compare the top 3 open IPOs for me.",
+    ]
+
+    for col, prompt in zip(prompt_cols, prompts):
+        with col:
+            if st.button(prompt, key="prompt_" + str(prompts.index(prompt)), use_container_width=True):
+                st.session_state["ai_pending_prompt"] = prompt
+
+    pending = st.session_state.pop("ai_pending_prompt", None)
+    if pending:
+        st.session_state["ai_chat_messages"].append({"role": "user", "content": pending})
+        try:
+            answer = chat_with_advisor(
+                pending,
+                analysis={"recommendations": list(st.session_state["ai_scores"].values())},
+                ipos=build_ai_dataset(df),
             )
+            st.session_state["ai_chat_messages"].append({"role": "assistant", "content": answer})
+        except Exception as exc:
+            st.error(f"AI error: {exc}")
 
-        with ai_col2:
-            ai_risk = st.selectbox(
-                "Risk tolerance",
-                ["Conservative", "Moderate", "Aggressive"],
-                key="ai_risk",
+    for message in st.session_state["ai_chat_messages"]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    question = st.chat_input("Ask about an IPO, listing gains, allotment, risks...")
+    if question:
+        st.session_state["ai_chat_messages"].append({"role": "user", "content": question})
+        try:
+            answer = chat_with_advisor(
+                question,
+                analysis={"recommendations": list(st.session_state["ai_scores"].values())},
+                ipos=build_ai_dataset(df),
             )
+            st.session_state["ai_chat_messages"].append({"role": "assistant", "content": answer})
+            st.rerun()
+        except Exception as exc:
+            st.error(f"AI error: {exc}")
 
-        with ai_col3:
-            ai_horizon = st.selectbox(
-                "Holding horizon",
-                ["Listing day", "Short term", "Long term"],
-                key="ai_horizon",
-            )
-
-        if st.button(
-            "Analyze current IPOs",
-            type="primary",
-            disabled=not api_key_available,
-            key="analyze_ipos_button",
-        ):
-            with st.spinner("Gemini is analyzing the current IPO set..."):
-                try:
-                    st.session_state["ai_analysis"] = analyze_ipos(
-                        build_ai_dataset(df),
-                        objective=ai_objective,
-                        risk_tolerance=ai_risk,
-                        horizon=ai_horizon,
-                    )
-                except Exception as exc:
-                    st.error(f"Gemini error: {exc}")
-
-        analysis = st.session_state.get("ai_analysis")
-
-        if analysis:
-
-            st.markdown("### What looks worth applying?")
-            st.caption(analysis.get("summary", ""))
-
-            for item in analysis.get("recommendations", []):
-
-                verdict = str(item.get("verdict", "Insufficient data"))
-
-                with st.container(border=True):
-
-                    c1, c2, c3 = st.columns([3, 1, 1])
-
-                    with c1:
-                        st.markdown(
-                            f"**{item.get('company_name', 'Unknown')}**"
-                        )
-                        st.caption(
-                            f"{verdict.upper()} · "
-                            f"{item.get('confidence', 'Low')} confidence"
-                        )
-
-                    with c2:
-                        st.metric(
-                            "Investment",
-                            f"{item.get('investment_score', 0)}/100",
-                        )
-
-                    with c3:
-                        st.metric(
-                            "Allotment",
-                            f"{item.get('allotment_score', 0)}/100",
-                        )
-
-                    st.write(
-                        item.get(
-                            "reason",
-                            "No explanation provided.",
-                        )
-                    )
-
-                    risks = item.get("key_risks", [])
-                    if risks:
-                        st.caption(
-                            "Key risks: " + " · ".join(risks[:3])
-                        )
-
-            st.markdown("### Ask the advisor")
-
-            for message in st.session_state["ai_messages"]:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-
-            user_question = st.chat_input(
-                "Ask: Which IPO is best for listing gains?",
-                key="ai_chat_input",
-            )
-
-            if user_question:
-
-                st.session_state["ai_messages"].append(
-                    {
-                        "role": "user",
-                        "content": user_question,
-                    }
-                )
-
-                with st.spinner("Thinking..."):
-                    try:
-                        answer = chat_with_advisor(
-                            build_ai_dataset(df),
-                            analysis,
-                            user_question,
-                        )
-
-                        st.session_state["ai_messages"].append(
-                            {
-                                "role": "assistant",
-                                "content": answer,
-                            }
-                        )
-
-                        st.rerun()
-
-                    except Exception as exc:
-                        st.error(f"Gemini error: {exc}")
-
+    st.stop()
 
 # ---------- Detail view ----------
 
@@ -949,123 +978,63 @@ d.metric(
 )
 
 
-st.markdown("## IPO Discovery")
+disc_head, disc_action = st.columns([6, 1])
+with disc_head:
+    st.markdown("## IPO Discovery")
+with disc_action:
+    if st.button("Open AI Analyst", use_container_width=True):
+        open_ai_analyst()
 
 
-def render_section(
-    title,
-    section_df,
-):
-
+def render_section(title, section_df):
     if section_df.empty:
         return
 
-    st.markdown(
-        f"### {title}"
-    )
+    st.markdown(f"### {title}")
 
     for _, row in section_df.iterrows():
+        source_id = str(row["source_id"])
+        company = clean_text(row.get("company_name")) or "Unknown IPO"
+        status = normalized_status(row)
+        segment_name = clean_text(row.get("segment")) or "IPO"
+        score = st.session_state["ai_scores"].get(source_id)
 
-        company = (
-            clean_text(
-                row.get("company_name")
-            )
-            or "Unknown IPO"
-        )
-
-        status = normalized_status(
-            row
-        )
-
-        segment_name = (
-            clean_text(
-                row.get("segment")
-            )
-            or "IPO"
-        )
-
-        # Use a bordered container so each IPO
-        # reads as a self-contained card.
-        with st.container(
-            border=True
-        ):
-
-            title_col, metrics_col, action_col = st.columns(
-                [2.4, 5.8, 1]
-            )
+        with st.container(border=True):
+            title_col, m1, m2, m3, m4, actions = st.columns([2.35, 1.25, 1.0, 1.05, 1.35, 1.45])
 
             with title_col:
-
-                st.markdown(
-                    f"**{company}**"
-                )
-
-                st.caption(
-                    f"{segment_name} · {status}"
-                )
-
-                close_date = format_date(
-                    row.get("close_date")
-                )
-
+                st.markdown(f'<div class="ipo-card-title">{company}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="ipo-card-meta">{segment_name} · {status}</div>', unsafe_allow_html=True)
                 if status == "Live":
-                    st.caption(
-                        f"Closes {close_date}"
-                    )
-
+                    st.markdown(f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>', unsafe_allow_html=True)
                 elif status == "Upcoming":
-                    st.caption(
-                        f"Opens {format_date(row.get('open_date'))}"
-                    )
+                    st.markdown(f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>', unsafe_allow_html=True)
 
-            with metrics_col:
+            with m1:
+                st.metric("Price", price_band(row))
+            with m2:
+                st.metric("Lot", f'{int(row["lot_size"]):,}' if not is_missing(row.get("lot_size")) else "—")
+            with m3:
+                st.metric("GMP", money(row.get("gmp")))
+            with m4:
+                st.metric("Subscription", multiple(row.get("subscription")))
 
-                m1, m2, m3, m4 = st.columns(4)
-
-                m1.metric(
-                    "Price",
-                    price_band(row),
-                )
-
-                m2.metric(
-                    "Lot",
-                    (
-                        f"{int(row['lot_size']):,}"
-                        if not is_missing(
-                            row.get("lot_size")
-                        )
-                        else "—"
-                    ),
-                )
-
-                m3.metric(
-                    "GMP",
-                    money(row.get("gmp")),
-                )
-
-                m4.metric(
-                    "Subscription",
-                    multiple(
-                        row.get("subscription")
-                    ),
-                )
-
-            with action_col:
-
-                st.write("")
-
-                if st.button(
-                    "View",
-                    key=f"view_{row['source_id']}",
-                    use_container_width=True,
-                ):
-
-                    st.session_state[
-                        "selected_ipo"
-                    ] = row["source_id"]
-
+            with actions:
+                if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
+                    ai_score_for_ipo(row)
+                    st.rerun()
+                if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
+                    st.session_state["selected_ipo"] = source_id
+                    st.session_state["app_view"] = "discovery"
                     st.rerun()
 
+            if score:
+                st.markdown('<div class="ai-score-strip">', unsafe_allow_html=True)
+                render_ai_score(score)
+                risks = score.get("key_risks", [])
+                if risks:
+                    st.caption("Risks: " + " · ".join(risks[:3]))
+                st.markdown('</div>', unsafe_allow_html=True)
 
 # Always show the three useful buckets.
 render_section(
