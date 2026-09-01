@@ -9,6 +9,7 @@ import streamlit as st
 from collector import collect_once
 from config import DB_PATH
 from database import Database
+from ai_advisor import analyze_ipos, chat_with_advisor, get_gemini_api_key
 
 
 st.set_page_config(
@@ -247,6 +248,178 @@ df["display_status"] = df.apply(
     normalized_status,
     axis=1,
 )
+
+
+
+# ---------- AI Advisor ----------
+
+if not st.session_state.get("selected_ipo"):
+
+    def build_ai_dataset(frame):
+        cols = [
+            "source_id", "company_name", "segment", "display_status",
+            "open_date", "close_date", "price_low", "price_high",
+            "lot_size", "issue_size", "fresh_issue", "ofs_issue",
+            "gmp", "gmp_pct", "indicative_listing", "subscription",
+            "qib", "nii", "snii", "bnii", "retail", "applications",
+            "listing_exchange",
+        ]
+        available = [c for c in cols if c in frame.columns]
+        data = frame[available].copy()
+        return data.where(pd.notna(data), None).to_dict(orient="records")
+
+    if "ai_messages" not in st.session_state:
+        st.session_state["ai_messages"] = []
+
+    with st.expander("AI IPO Advisor", expanded=False):
+
+        st.caption(
+            "Gemini reviews the IPO data currently collected by this app. "
+            "It separates investment attractiveness from allotment attractiveness "
+            "and does not treat GMP as a guarantee."
+        )
+
+        api_key_available = bool(get_gemini_api_key())
+
+        if not api_key_available:
+            st.warning(
+                "Gemini API key not configured. Add GEMINI_API_KEY to "
+                "Streamlit secrets or your environment."
+            )
+
+        ai_col1, ai_col2, ai_col3 = st.columns(3)
+
+        with ai_col1:
+            ai_objective = st.selectbox(
+                "What are you optimizing for?",
+                [
+                    "Balanced",
+                    "Listing gains",
+                    "Long-term investment",
+                    "Allotment probability",
+                ],
+                key="ai_objective",
+            )
+
+        with ai_col2:
+            ai_risk = st.selectbox(
+                "Risk tolerance",
+                ["Conservative", "Moderate", "Aggressive"],
+                key="ai_risk",
+            )
+
+        with ai_col3:
+            ai_horizon = st.selectbox(
+                "Holding horizon",
+                ["Listing day", "Short term", "Long term"],
+                key="ai_horizon",
+            )
+
+        if st.button(
+            "Analyze current IPOs",
+            type="primary",
+            disabled=not api_key_available,
+            key="analyze_ipos_button",
+        ):
+            with st.spinner("Gemini is analyzing the current IPO set..."):
+                try:
+                    st.session_state["ai_analysis"] = analyze_ipos(
+                        build_ai_dataset(df),
+                        objective=ai_objective,
+                        risk_tolerance=ai_risk,
+                        horizon=ai_horizon,
+                    )
+                except Exception as exc:
+                    st.error(f"Gemini error: {exc}")
+
+        analysis = st.session_state.get("ai_analysis")
+
+        if analysis:
+
+            st.markdown("### What looks worth applying?")
+            st.caption(analysis.get("summary", ""))
+
+            for item in analysis.get("recommendations", []):
+
+                verdict = str(item.get("verdict", "Insufficient data"))
+
+                with st.container(border=True):
+
+                    c1, c2, c3 = st.columns([3, 1, 1])
+
+                    with c1:
+                        st.markdown(
+                            f"**{item.get('company_name', 'Unknown')}**"
+                        )
+                        st.caption(
+                            f"{verdict.upper()} · "
+                            f"{item.get('confidence', 'Low')} confidence"
+                        )
+
+                    with c2:
+                        st.metric(
+                            "Investment",
+                            f"{item.get('investment_score', 0)}/100",
+                        )
+
+                    with c3:
+                        st.metric(
+                            "Allotment",
+                            f"{item.get('allotment_score', 0)}/100",
+                        )
+
+                    st.write(
+                        item.get(
+                            "reason",
+                            "No explanation provided.",
+                        )
+                    )
+
+                    risks = item.get("key_risks", [])
+                    if risks:
+                        st.caption(
+                            "Key risks: " + " · ".join(risks[:3])
+                        )
+
+            st.markdown("### Ask the advisor")
+
+            for message in st.session_state["ai_messages"]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+            user_question = st.chat_input(
+                "Ask: Which IPO is best for listing gains?",
+                key="ai_chat_input",
+            )
+
+            if user_question:
+
+                st.session_state["ai_messages"].append(
+                    {
+                        "role": "user",
+                        "content": user_question,
+                    }
+                )
+
+                with st.spinner("Thinking..."):
+                    try:
+                        answer = chat_with_advisor(
+                            build_ai_dataset(df),
+                            analysis,
+                            user_question,
+                        )
+
+                        st.session_state["ai_messages"].append(
+                            {
+                                "role": "assistant",
+                                "content": answer,
+                            }
+                        )
+
+                        st.rerun()
+
+                    except Exception as exc:
+                        st.error(f"Gemini error: {exc}")
 
 
 # ---------- Detail view ----------
