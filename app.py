@@ -133,20 +133,16 @@ button, input, textarea, select {
 .strategy-row { display:flex; justify-content:space-between; align-items:center; margin:.55rem 0; gap:1rem; }
 
 @media (max-width: 480px) {
-    /* Mobile: reserve space for Streamlit's fixed top toolbar without
-       creating a second/floating app header. */
-    [data-testid="stAppViewContainer"] .main .block-container {
-        padding-top: 1.15rem !important;
+    /* Streamlit's mobile toolbar is fixed above the app content.
+       Reserve a full safe-area so the first heading can never sit underneath it. */
+    .block-container {
+        padding-top: 7rem !important;
         padding-left: 0.55rem;
         padding-right: 0.55rem;
     }
 
     [data-testid="stHeader"] {
         z-index: 1000 !important;
-    }
-
-    [data-testid="stAppViewContainer"] {
-        padding-top: 0 !important;
     }
 
     .alloc-grid { grid-template-columns:1fr; }
@@ -446,7 +442,7 @@ def discovery_page(df):
                         </div>
                     </div>
                 </div>''').strip()
-                st.markdown(card_html, unsafe_allow_html=True)
+                st.html(card_html)
 
                 if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
                     ai_score_for_ipo(row)
@@ -857,9 +853,8 @@ df["display_status"] = df.apply(normalized_status, axis=1)
 
 
 # ---------- Native Streamlit navigation ----------
-# Hide Streamlit's built-in page list and render the app navigation only in
-# the sidebar. The main mobile content must never contain a second navigation
-# bar or floating navigation buttons.
+# Hide Streamlit's built-in page list and keep app navigation exclusively
+# in the sidebar. The main mobile content has no floating navigation bar.
 DISCOVERY_PAGE = st.Page(
     lambda: discovery_page(df),
     title="Discovery",
@@ -900,9 +895,9 @@ with st.sidebar:
     st.markdown("# IPO Intelligence")
     st.caption("Research, demand, and AI decision support")
     st.markdown("### Navigation")
-    st.page_link(DISCOVERY_PAGE, label="Discovery", icon="🔎", width="stretch")
-    st.page_link(ALLOTMENT_PAGE, label="Allotment Optimizer", icon="🎯", width="stretch")
-    st.page_link(AI_ANALYST_PAGE, label="AI Analyst", icon="🤖", width="stretch")
+    st.page_link(DISCOVERY_PAGE, label="Discovery", icon="🔎")
+    st.page_link(ALLOTMENT_PAGE, label="Allotment Optimizer", icon="🎯")
+    st.page_link(AI_ANALYST_PAGE, label="AI Analyst", icon="🤖")
     st.markdown("---")
     if st.button("Refresh data", use_container_width=True):
         try:
