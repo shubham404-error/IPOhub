@@ -141,8 +141,8 @@ button, input, textarea, select {
     }
 
     [data-testid="stSidebar"] {
-        min-width: 82vw;
-        max-width: 88vw;
+        min-width: 0;
+        max-width: none;
     }
 
     .ipo-card-title {
@@ -175,6 +175,24 @@ button, input, textarea, select {
     /* Reduce excessive vertical whitespace around cards */
     [data-testid="stVerticalBlock"] {
         gap: 0.35rem;
+    }
+}
+
+/* Mobile-first cards: keep content readable instead of squeezing six columns. */
+.ipo-card-title {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (max-width: 768px) {
+    .stButton > button {
+        width: 100%;
+        min-height: 2.55rem;
+        font-size: 0.82rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        font-size: 1.05rem !important;
     }
 }
 
@@ -392,10 +410,17 @@ def render_ai_score(score):
 # ---------- Page: Discovery ----------
 
 def discovery_page(df):
+    # Keep the detail flow inside the same Streamlit page. This avoids
+    # st.switch_page() issues with st.Page(lambda: ...) navigation.
+    if st.session_state.get("selected_ipo"):
+        ipo_detail_page(df)
+        return
+
     st.title("IPO Discovery")
     st.caption("Find open and upcoming IPOs, then use Ask AI for a quick evidence-based decision view.")
 
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+    c1, c2 = st.columns(2)
+    c3, c4 = st.columns(2)
     with c1:
         segment = st.selectbox("Segment", ["All", "Mainboard", "SME"])
     with c2:
@@ -443,14 +468,14 @@ def discovery_page(df):
             score = st.session_state["ai_scores"].get(source_id)
 
             with st.container(border=True):
-                title_col, m1, m2, m3, m4, actions = st.columns([2.25, 1.55, 0.9, 1.05, 1.25, 1.35])
-                with title_col:
-                    st.markdown(f'<div class="ipo-card-title">{company}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="ipo-card-meta">{segment_name} · {status}</div>', unsafe_allow_html=True)
-                    if status == "Live":
-                        st.markdown(f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>', unsafe_allow_html=True)
-                    elif status == "Upcoming":
-                        st.markdown(f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="ipo-card-title">{company}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="ipo-card-meta">{segment_name} · {status}</div>', unsafe_allow_html=True)
+                if status == "Live":
+                    st.markdown(f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>', unsafe_allow_html=True)
+                elif status == "Upcoming":
+                    st.markdown(f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>', unsafe_allow_html=True)
+
+                m1, m2 = st.columns(2)
                 with m1:
                     st.markdown(
                         f'<div class="ipo-card-label">Price</div>'
@@ -464,6 +489,8 @@ def discovery_page(df):
                         f'<div class="ipo-card-value">{lot_value}</div>',
                         unsafe_allow_html=True,
                     )
+
+                m3, m4 = st.columns(2)
                 with m3:
                     st.markdown(
                         f'<div class="ipo-card-label">GMP</div>'
@@ -476,10 +503,13 @@ def discovery_page(df):
                         f'<div class="ipo-card-value">{multiple(row.get("subscription"))}</div>',
                         unsafe_allow_html=True,
                     )
-                with actions:
+
+                a1, a2 = st.columns(2)
+                with a1:
                     if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
                         ai_score_for_ipo(row)
-                        st.rerun()
+                        score = st.session_state["ai_scores"].get(source_id)
+                with a2:
                     if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
                         st.session_state["selected_ipo"] = source_id
                         st.session_state["app_view"] = "ipo_detail"
@@ -518,9 +548,9 @@ def ai_analyst_page(df):
         "Which IPOs should I avoid and why?",
         "Compare the top 3 open IPOs for me.",
     ]
-    cols = st.columns(4)
+    cols = st.columns(2)
     for i, prompt in enumerate(prompts):
-        with cols[i]:
+        with cols[i % 2]:
             if st.button(prompt, key=f"analyst_prompt_{i}", use_container_width=True):
                 st.session_state["ai_pending_prompt"] = prompt
 
@@ -587,7 +617,8 @@ def allotment_page(df):
         retail_application = None
 
     st.markdown("### Your application setup")
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
+    c3, _ = st.columns(2)
     with c1:
         capital = st.number_input("Capital available", min_value=0.0, value=200000.0, step=1000.0, format="%.0f")
     with c2:
@@ -666,44 +697,50 @@ def ipo_detail_page(df):
     row, sub_history, gmp_history = get_selected_ipo(selected_id)
     if not row:
         st.error("The selected IPO could not be found.")
-        if st.button("Back to Discovery"):
+        if st.button("Back to Discovery", use_container_width=True):
             st.session_state.pop("selected_ipo", None)
-            st.switch_page("discovery")
+            st.session_state["app_view"] = "discovery"
+            st.rerun()
         return
 
-    if st.button("← Back to Discovery"):
+    if st.button("← Back to Discovery", use_container_width=True):
         st.session_state.pop("selected_ipo", None)
-        st.switch_page("discovery")
+        st.session_state["app_view"] = "discovery"
+        st.rerun()
 
     st.markdown("---")
     st.title(clean_text(row.get("company_name")) or "IPO")
     status = normalized_status(row)
     st.caption(f"{status} · {clean_text(row.get('segment')) or 'IPO'}")
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2 = st.columns(2)
     m1.metric("Price band", price_band(row))
     m2.metric("Lot size", f'{int(row["lot_size"]):,}' if not is_missing(row.get("lot_size")) else "—")
+    m3, m4 = st.columns(2)
     m3.metric("Issue size", f'₹{float(row["issue_size"]):,.2f} Cr' if not is_missing(row.get("issue_size")) else "—")
     m4.metric("GMP", money(row.get("gmp")))
 
     st.subheader("IPO timeline")
-    t1, t2, t3, t4 = st.columns(4)
+    t1, t2 = st.columns(2)
     t1.metric("Open", format_date(row.get("open_date")))
     t2.metric("Close", format_date(row.get("close_date")))
+    t3, t4 = st.columns(2)
     t3.metric("Allotment", format_date(row.get("allotment_date")))
     t4.metric("Listing", format_date(row.get("listing_date")))
 
     st.markdown("---")
     st.subheader("Subscription")
-    s1, s2, s3, s4, s5 = st.columns(5)
+    s1, s2 = st.columns(2)
     s1.metric("QIB", multiple(row.get("qib")))
     s2.metric("NII", multiple(row.get("nii")))
+    s3, s4 = st.columns(2)
     s3.metric("sNII", multiple(row.get("snii")))
     s4.metric("bNII", multiple(row.get("bnii")))
+    s5, s6 = st.columns(2)
     s5.metric("Retail", multiple(row.get("retail")))
-
-    s6, s7, s8 = st.columns(3)
     s6.metric("Total", multiple(row.get("subscription")))
+
+    s7, s8 = st.columns(2)
     s7.metric("Applications", applications(row.get("applications")))
     s8.metric("GMP %", f'{float(row["gmp_pct"]):.1f}%' if not is_missing(row.get("gmp_pct")) else "—")
 
