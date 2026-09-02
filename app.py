@@ -133,12 +133,20 @@ button, input, textarea, select {
 .strategy-row { display:flex; justify-content:space-between; align-items:center; margin:.55rem 0; gap:1rem; }
 
 @media (max-width: 480px) {
-    /* Streamlit Cloud's mobile toolbar occupies the top of the viewport.
-       Keep app content below it instead of letting the toolbar/ribbon cover the header. */
-    .block-container {
-        padding-top: 4.75rem !important;
+    /* Mobile: reserve space for Streamlit's fixed top toolbar without
+       creating a second/floating app header. */
+    [data-testid="stAppViewContainer"] .main .block-container {
+        padding-top: 1.15rem !important;
         padding-left: 0.55rem;
         padding-right: 0.55rem;
+    }
+
+    [data-testid="stHeader"] {
+        z-index: 1000 !important;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
     }
 
     .alloc-grid { grid-template-columns:1fr; }
@@ -849,9 +857,9 @@ df["display_status"] = df.apply(normalized_status, axis=1)
 
 
 # ---------- Native Streamlit navigation ----------
-# Streamlit's recommended navigation model is used, but its sidebar menu is
-# hidden. The app supplies a mobile-first navigation bar using the exact Page
-# objects registered here. This makes programmatic navigation deterministic.
+# Hide Streamlit's built-in page list and render the app navigation only in
+# the sidebar. The main mobile content must never contain a second navigation
+# bar or floating navigation buttons.
 DISCOVERY_PAGE = st.Page(
     lambda: discovery_page(df),
     title="Discovery",
@@ -892,9 +900,9 @@ with st.sidebar:
     st.markdown("# IPO Intelligence")
     st.caption("Research, demand, and AI decision support")
     st.markdown("### Navigation")
-    st.page_link(DISCOVERY_PAGE, label="Discovery", icon="🔎")
-    st.page_link(ALLOTMENT_PAGE, label="Allotment Optimizer", icon="🎯")
-    st.page_link(AI_ANALYST_PAGE, label="AI Analyst", icon="🤖")
+    st.page_link(DISCOVERY_PAGE, label="Discovery", icon="🔎", width="stretch")
+    st.page_link(ALLOTMENT_PAGE, label="Allotment Optimizer", icon="🎯", width="stretch")
+    st.page_link(AI_ANALYST_PAGE, label="AI Analyst", icon="🤖", width="stretch")
     st.markdown("---")
     if st.button("Refresh data", use_container_width=True):
         try:
