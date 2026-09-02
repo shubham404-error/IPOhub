@@ -23,7 +23,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 html, body, [class*="css"] {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
 }
 
 .stApp {
@@ -32,172 +32,41 @@ html, body, [class*="css"] {
 
 .block-container {
     max-width: 1440px;
-    padding-top: 1rem;
-    padding-bottom: 2.5rem;
-    padding-left: clamp(0.75rem, 2vw, 2rem);
-    padding-right: clamp(0.75rem, 2vw, 2rem);
-}
-
-/* Compact global typography */
-h1 {
-    font-size: clamp(1.65rem, 3vw, 2.25rem) !important;
-    line-height: 1.1 !important;
-}
-h2 {
-    font-size: clamp(1.35rem, 2.5vw, 1.75rem) !important;
-}
-h3 {
-    font-size: clamp(1.05rem, 2vw, 1.3rem) !important;
+    padding-top: 1.2rem;
+    padding-bottom: 3rem;
 }
 
 button, input, textarea, select {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: Helvetica Neue, Helvetica, Arial, sans-serif !important;
 }
 
-/* IPO card */
 .ipo-card-title {
-    font-size: 1rem;
+    font-size: 1.08rem;
     font-weight: 700;
     line-height: 1.2;
-    margin-bottom: 0.18rem;
 }
 
 .ipo-card-meta {
-    font-size: 0.74rem;
-    line-height: 1.35;
+    font-size: 0.82rem;
     opacity: 0.62;
-}
-
-.ipo-card-value {
-    font-size: 1.35rem;
-    font-weight: 500;
-    line-height: 1.15;
-    white-space: nowrap;
-    overflow: visible;
-}
-
-.ipo-card-label {
-    font-size: 0.72rem;
-    line-height: 1.1;
-    margin-bottom: 0.22rem;
-    opacity: 0.9;
 }
 
 .ai-score-strip {
     border-top: 1px solid rgba(255,255,255,0.10);
-    margin-top: 0.65rem;
-    padding-top: 0.65rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
 }
 
 .calc-hero {
-    padding: 0.9rem 1rem;
+    padding: 1rem 1.1rem;
     border: 1px solid rgba(255,255,255,0.10);
     border-radius: 12px;
     background: rgba(255,255,255,0.025);
 }
 
 .small-note {
-    font-size: 0.78rem;
-    opacity: 0.65;
-}
-
-/* Streamlit metrics: smaller so price bands never get ellipsized */
-[data-testid="stMetricValue"] {
-    font-size: 1.28rem !important;
-    line-height: 1.15 !important;
-    white-space: nowrap !important;
-}
-[data-testid="stMetricLabel"] {
-    font-size: 0.72rem !important;
-}
-[data-testid="stMetricDelta"] {
-    font-size: 0.68rem !important;
-}
-
-/* Buttons */
-.stButton > button {
-    min-height: 2.25rem;
-    border-radius: 8px;
     font-size: 0.82rem;
-    padding: 0.25rem 0.55rem;
-}
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-    min-width: 250px;
-    max-width: 280px;
-}
-[data-testid="stSidebar"] .stButton > button {
-    min-height: 2.35rem;
-}
-
-/* Mobile */
-@media (max-width: 768px) {
-    .block-container {
-        padding-top: 0.65rem;
-        padding-left: 0.7rem;
-        padding-right: 0.7rem;
-        padding-bottom: 2rem;
-    }
-
-    [data-testid="stSidebar"] {
-        min-width: 82vw;
-        max-width: 88vw;
-    }
-
-    .ipo-card-title {
-        font-size: 0.96rem;
-    }
-
-    .ipo-card-meta {
-        font-size: 0.7rem;
-    }
-
-    .ipo-card-value,
-    [data-testid="stMetricValue"] {
-        font-size: 1.08rem !important;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.66rem !important;
-    }
-
-    .stButton > button {
-        min-height: 2.15rem;
-        font-size: 0.76rem;
-    }
-
-    /* Let Streamlit columns breathe on narrow screens */
-    [data-testid="stHorizontalBlock"] {
-        gap: 0.45rem;
-    }
-
-    /* Reduce excessive vertical whitespace around cards */
-    [data-testid="stVerticalBlock"] {
-        gap: 0.35rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .block-container {
-        padding-left: 0.55rem;
-        padding-right: 0.55rem;
-    }
-
-    .ipo-card-value,
-    [data-testid="stMetricValue"] {
-        font-size: 0.98rem !important;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.62rem !important;
-    }
-
-    .stButton > button {
-        font-size: 0.72rem;
-        padding-left: 0.35rem;
-        padding-right: 0.35rem;
-    }
+    opacity: 0.65;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -319,11 +188,6 @@ def build_ai_dataset(frame):
         "issue_size", "fresh_issue", "ofs_issue", "gmp", "gmp_pct",
         "indicative_listing", "subscription", "qib", "nii", "snii",
         "bnii", "retail", "applications", "listing_exchange",
-        "anchor_amount", "anchor_count", "anchor_price", "anchor_mf_pct",
-        "anchor_summary", "anchor_investors",
-        "pre_issue_holding", "post_issue_holding", "pe_pre", "pe_post",
-        "roe", "roce", "ronw", "pat_margin", "debt_equity", "price_book",
-        "market_cap", "fresh_issue", "ofs_issue", "strengths", "risks",
     ]
     available = [c for c in cols if c in frame.columns]
     data = frame[available].copy()
@@ -368,32 +232,12 @@ def render_ai_score(score):
     if reason:
         st.caption(reason)
 
-    sig1, sig2 = st.columns(2)
-    with sig1:
-        anchor_signal = clean_text(score.get("anchor_signal"))
-        if anchor_signal:
-            st.markdown(f"**Anchor signal:** {anchor_signal}")
-        valuation_signal = clean_text(score.get("valuation_signal"))
-        if valuation_signal:
-            st.caption(f"Valuation: {valuation_signal}")
-    with sig2:
-        financial_signal = clean_text(score.get("financial_signal"))
-        if financial_signal:
-            st.markdown(f"**Financial quality:** {financial_signal}")
-        demand_signal = clean_text(score.get("demand_signal"))
-        if demand_signal:
-            st.caption(f"Demand: {demand_signal}")
-
-    research_notes = clean_text(score.get("research_notes"))
-    if research_notes:
-        st.caption("Research: " + research_notes)
-
 
 # ---------- Page: Discovery ----------
 
 def discovery_page(df):
     st.title("IPO Discovery")
-    st.caption("Find open and upcoming IPOs, then use Ask AI for a quick evidence-based decision view.")
+    st.caption("Find open and upcoming IPOs, then use Ask AI for a quick decision view.")
 
     c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
     with c1:
@@ -443,7 +287,7 @@ def discovery_page(df):
             score = st.session_state["ai_scores"].get(source_id)
 
             with st.container(border=True):
-                title_col, m1, m2, m3, m4, actions = st.columns([2.25, 1.55, 0.9, 1.05, 1.25, 1.35])
+                title_col, m1, m2, m3, m4, actions = st.columns([2.35, 1.25, 1.0, 1.05, 1.35, 1.45])
                 with title_col:
                     st.markdown(f'<div class="ipo-card-title">{company}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="ipo-card-meta">{segment_name} · {status}</div>', unsafe_allow_html=True)
@@ -452,30 +296,13 @@ def discovery_page(df):
                     elif status == "Upcoming":
                         st.markdown(f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>', unsafe_allow_html=True)
                 with m1:
-                    st.markdown(
-                        f'<div class="ipo-card-label">Price</div>'
-                        f'<div class="ipo-card-value">{price_band(row)}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.metric("Price", price_band(row))
                 with m2:
-                    lot_value = f'{int(row["lot_size"]):,}' if not is_missing(row.get("lot_size")) else "—"
-                    st.markdown(
-                        f'<div class="ipo-card-label">Lot</div>'
-                        f'<div class="ipo-card-value">{lot_value}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.metric("Lot", f'{int(row["lot_size"]):,}' if not is_missing(row.get("lot_size")) else "—")
                 with m3:
-                    st.markdown(
-                        f'<div class="ipo-card-label">GMP</div>'
-                        f'<div class="ipo-card-value">{money(row.get("gmp"))}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.metric("GMP", money(row.get("gmp")))
                 with m4:
-                    st.markdown(
-                        f'<div class="ipo-card-label">Subscription</div>'
-                        f'<div class="ipo-card-value">{multiple(row.get("subscription"))}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.metric("Subscription", multiple(row.get("subscription")))
                 with actions:
                     if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
                         ai_score_for_ipo(row)
@@ -483,7 +310,7 @@ def discovery_page(df):
                     if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
                         st.session_state["selected_ipo"] = source_id
                         st.session_state["app_view"] = "ipo_detail"
-                        st.switch_page("ipo_detail")
+                        st.switch_page("ipo-detail")
 
                 if score:
                     st.markdown('<div class="ai-score-strip">', unsafe_allow_html=True)
