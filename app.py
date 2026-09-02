@@ -635,7 +635,7 @@ df["display_status"] = df.apply(normalized_status, axis=1)
 pages = [
     st.Page(lambda: discovery_page(df), title="Discovery", icon="🔎", url_path="discovery", default=True),
     st.Page(lambda: allotment_page(df), title="Allotment Chances", icon="🎯", url_path="allotment-chances"),
-    st.Page(lambda: ai_analyst_page(df), title="AI Analyst", icon="✦", url_path="ai-analyst"),
+    st.Page(lambda: ai_analyst_page(df), title="AI Analyst", icon="🤖", url_path="ai-analyst"),
     st.Page(lambda: ipo_detail_page(df), title="IPO Detail", icon="📄", url_path="ipo-detail"),
 ]
 
