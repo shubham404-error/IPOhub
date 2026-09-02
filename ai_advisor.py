@@ -25,24 +25,189 @@ def _get_client():
     return genai.Client(api_key=api_key)
 
 
+# Free-tier protection: avoid accidental bursts and duplicate requests.
+import hashlib
+import threading
+import time
+
+_API_LOCK = threading.Lock()
+_LAST_API_CALL = 0.0
+_MIN_SECONDS_BETWEEN_CALLS = 2.5
+
+_RESPONSE_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+_CACHE_TTL_SECONDS = 90
+
+
+def _error_text(exc):
+    return str(exc or "")
+
+
+def _status_code(exc):
+    for attr in ("status_code", "code"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+        try:
+            if value is not None:
+                return int(value)
+        except Exception:
+            pass
+
+    text = _error_text(exc)
+    for code in ("429", "500", "503", "504"):
+        if code in text:
+            return int(code)
+    return None
+
+
+def _is_daily_quota_error(exc):
+    text = _error_text(exc).lower()
+    return (
+        "quota" in text
+        or ("daily" in text and "limit" in text)
+        or ("resource exhausted" in text and "per day" in text)
+    )
+
+
+def _is_retryable_rate_error(exc):
+    code = _status_code(exc)
+    text = _error_text(exc).lower()
+
+    # Never hammer a daily quota that cannot recover during this session.
+    if _is_daily_quota_error(exc):
+        return False
+
+    if code in (500, 503, 504):
+        return True
+
+    if code == 429 or "rate_limit_exceeded" in text or "too many requests" in text:
+        return True
+
+    if "service unavailable" in text or "temporarily overloaded" in text:
+        return True
+
+    return False
+
+
 def _friendly_gemini_error(exc):
-    """Turn common Gemini API failures into useful app messages."""
-    text = str(exc)
+    code = _status_code(exc)
+    text = _error_text(exc)
     lowered = text.lower()
 
-    if "429" in lowered or "resource_exhausted" in lowered or "rate limit" in lowered:
+    if _is_daily_quota_error(exc):
         return (
-            "Gemini free-tier rate limit reached. "
-            "Please wait a little and try again. The app will not retry automatically."
+            "Gemini's free-tier daily quota has been reached. "
+            "The app will not keep retrying. Please try again after the quota resets."
         )
 
-    if "quota" in lowered:
+    if code == 429 or "rate_limit_exceeded" in lowered or "too many requests" in lowered:
         return (
-            "Gemini free-tier quota has been reached. "
-            "Please try again after the quota resets."
+            "Gemini is temporarily rate-limiting the app. "
+            "Please wait about 30–60 seconds and try again."
+        )
+
+    if code == 503 or "service unavailable" in lowered or "temporarily overloaded" in lowered:
+        return (
+            "Gemini is temporarily busy. "
+            "The app already retried safely. Please try again in a moment."
         )
 
     return f"Gemini request failed: {text}"
+
+
+def _cache_key(model, prompt, structured):
+    raw = f"{model}|{int(bool(structured))}|{prompt}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _get_cached(key):
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        item = _RESPONSE_CACHE.get(key)
+        if not item:
+            return None
+        timestamp, response_text = item
+        if now - timestamp > _CACHE_TTL_SECONDS:
+            _RESPONSE_CACHE.pop(key, None)
+            return None
+        return response_text
+
+
+def _put_cached(key, response_text):
+    with _CACHE_LOCK:
+        _RESPONSE_CACHE[key] = (time.monotonic(), response_text)
+        if len(_RESPONSE_CACHE) > 100:
+            oldest_key = min(_RESPONSE_CACHE, key=lambda k: _RESPONSE_CACHE[k][0])
+            _RESPONSE_CACHE.pop(oldest_key, None)
+
+
+def _wait_for_global_spacing():
+    """Serialize calls enough to avoid accidental free-tier bursts."""
+    global _LAST_API_CALL
+
+    with _API_LOCK:
+        now = time.monotonic()
+        wait = _MIN_SECONDS_BETWEEN_CALLS - (now - _LAST_API_CALL)
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_API_CALL = time.monotonic()
+
+
+def _generate(client, prompt, structured=False):
+    """
+    Gemini request wrapper for the free tier.
+
+    Protections:
+    - 90-second cache for identical prompts/context.
+    - 2.5-second minimum spacing between API calls in the process.
+    - Exponential backoff for transient 503/500/504 errors.
+    - Conservative retry for temporary 429 rate limits.
+    - No retry for daily quota exhaustion.
+    """
+    kwargs = {}
+
+    if structured:
+        kwargs["response_mime_type"] = "application/json"
+        kwargs["response_schema"] = RECOMMENDATION_SCHEMA
+
+    cache_key = _cache_key(MODEL, prompt, structured)
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        class CachedResponse:
+            def __init__(self, text):
+                self.text = text
+        return CachedResponse(cached)
+
+    # 2s, 5s, 10s exponential backoff.
+    delays = (2.0, 5.0, 10.0)
+    max_attempts = 3
+    last_exc = None
+
+    for attempt in range(max_attempts):
+        try:
+            _wait_for_global_spacing()
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(**kwargs),
+            )
+
+            if not response.text:
+                raise RuntimeError("Gemini returned an empty response.")
+
+            _put_cached(cache_key, response.text)
+            return response
+
+        except Exception as exc:
+            last_exc = exc
+
+            if not _is_retryable_rate_error(exc) or attempt == max_attempts - 1:
+                raise RuntimeError(_friendly_gemini_error(exc)) from exc
+
+            time.sleep(delays[attempt])
+
+    raise RuntimeError(_friendly_gemini_error(last_exc)) from last_exc
 
 
 RECOMMENDATION_SCHEMA = {
@@ -111,7 +276,8 @@ def _generate(client, prompt, structured=False):
         kwargs["response_mime_type"] = "application/json"
         kwargs["response_schema"] = RECOMMENDATION_SCHEMA
 
-    # Do not pass GoogleSearch(), tools, temperature, top_p or top_k.
+    # Do not pass search tools or sampling controls. The free-tier app uses only
+    # the model and our supplied IPO data.
     # The free-tier app should use only the model + our supplied IPO data.
     try:
         return client.models.generate_content(
@@ -212,7 +378,6 @@ def chat_with_advisor(
     objective="Balanced",
     risk_tolerance="Moderate",
     holding_horizon="Listing day",
-    **kwargs,
 ):
     context = {
         "objective": objective,
