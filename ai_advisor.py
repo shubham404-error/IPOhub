@@ -28,9 +28,7 @@ def _get_client():
 RECOMMENDATION_SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {
-            "type": "string"
-        },
+        "summary": {"type": "string"},
         "recommendations": {
             "type": "array",
             "items": {
@@ -38,40 +36,23 @@ RECOMMENDATION_SCHEMA = {
                 "properties": {
                     "source_id": {"type": "string"},
                     "company_name": {"type": "string"},
-                    "verdict": {
-                        "type": "string",
-                        "enum": [
-                            "Apply",
-                            "Consider",
-                            "Avoid",
-                            "Insufficient data"
-                        ]
-                    },
-                    "investment_score": {
-                        "type": "integer"
-                    },
-                    "allotment_score": {
-                        "type": "integer"
-                    },
-                    "confidence": {
-                        "type": "string",
-                        "enum": ["High", "Medium", "Low"]
-                    },
+                    "verdict": {"type": "string", "enum": ["Apply", "Consider", "Avoid", "Insufficient data"]},
+                    "investment_score": {"type": "integer"},
+                    "allotment_score": {"type": "integer"},
+                    "confidence": {"type": "string", "enum": ["High", "Medium", "Low"]},
                     "reason": {"type": "string"},
-                    "key_risks": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    }
+                    "anchor_signal": {"type": "string"},
+                    "valuation_signal": {"type": "string"},
+                    "financial_signal": {"type": "string"},
+                    "demand_signal": {"type": "string"},
+                    "key_risks": {"type": "array", "items": {"type": "string"}},
+                    "research_notes": {"type": "string"}
                 },
                 "required": [
-                    "source_id",
-                    "company_name",
-                    "verdict",
-                    "investment_score",
-                    "allotment_score",
-                    "confidence",
-                    "reason",
-                    "key_risks"
+                    "source_id", "company_name", "verdict", "investment_score",
+                    "allotment_score", "confidence", "reason", "anchor_signal",
+                    "valuation_signal", "financial_signal", "demand_signal",
+                    "key_risks", "research_notes"
                 ]
             }
         }
@@ -101,31 +82,70 @@ def analyze_ipos(ipos, objective="Balanced",
     payload = json.dumps(ipos, ensure_ascii=False, default=str)
 
     prompt = f"""
-You are an IPO decision-support analyst.
+You are the decision engine for an Indian IPO intelligence application.
 
 User objective: {objective}
 Risk tolerance: {risk_tolerance}
 Holding horizon: {holding_horizon}
 
-Analyze ONLY the structured IPO data supplied below.
+Use the supplied IPO data as the primary source of truth. You also have access
+ to Google Search for targeted verification of anchor-investor reputation and
+recent institutional information.
 
-Rules:
-1. Never invent missing financials, valuation, promoters, subscription,
-   GMP, dates, or any other fact.
-2. Treat missing/null values as unknown.
-3. Separate investment attractiveness from allotment attractiveness.
-4. Investment Score is 0-100 and measures attractiveness as an investment.
-5. Allotment Score is 0-100 and measures attractiveness from the perspective
-   of getting an allotment.
-6. GMP is unofficial and must not be treated as guaranteed listing gain.
-7. High subscription does not automatically mean a good investment.
-8. If the available evidence is inadequate, use "Insufficient data".
-9. "Apply" means the available evidence is sufficiently attractive to consider
-   applying. It is not a guarantee of allotment or returns.
-10. Keep reasons concise and evidence-based.
-11. Do not manufacture valuation or financial-quality conclusions when those
-    fields are not present.
-12. Return one recommendation for every IPO supplied.
+IMPORTANT CORRECTION ABOUT SUBSCRIPTION TIMING:
+Do NOT penalize an IPO simply because QIB subscription is low early in the
+bidding period. QIB and NII demand can be heavily back-loaded and may rise
+sharply on the final day. Treat the current subscription as a time-stamped
+snapshot, not a final demand signal. Use the close date and subscription
+updated timestamp when interpreting demand.
+
+ANCHOR INVESTOR ANALYSIS:
+The anchor book is a pre-opening institutional signal and should be considered
+separately from live QIB subscription. Use the IPO Ji anchor disclosure supplied
+for the issue. Evaluate:
+- quality and credibility of named anchor institutions/fund houses;
+- breadth/diversity of the anchor book;
+- concentration in a few investors versus broad institutional participation;
+- domestic mutual fund participation;
+- recognised long-term institutional investors versus less informative entities;
+- whether reputable institutions have a meaningful allocation;
+- any recent, verifiable information about the investor that materially changes
+  the signal.
+Do NOT treat the presence of a famous investor as proof that the IPO is good.
+Anchor participation is one signal, not a guarantee of performance.
+
+OTHER FACTORS TO WEIGH:
+- valuation: P/E, P/B and market cap when available;
+- financial quality: revenue/profitability proxies, ROE, ROCE, RoNW, PAT margin,
+  debt/equity and promoter holding when available;
+- issue structure: fresh issue versus OFS;
+- GMP and GMP trend, but GMP is unofficial and not guaranteed;
+- subscription by category, interpreted with timing and close date;
+- issue size, price band and lot size;
+- stated strengths and risks from the IPO detail page;
+- sector/business quality only when supported by supplied data or targeted web
+  verification;
+- conflicts, concentration, or unusual anchor-book composition if verifiable.
+
+SCORING:
+- Investment Score: 0-100, attractiveness of the business/valuation/issue as
+  an investment for the stated horizon.
+- Allotment Score: 0-100, attractiveness from the probability/strategy of
+  receiving an allotment. Do not confuse this with investment quality.
+- Confidence: reflect how complete and reliable the evidence is.
+- Apply means the evidence is sufficiently attractive to consider applying,
+  not that returns or allotment are guaranteed.
+
+WEB RESEARCH RULES:
+- Search only when it materially improves the anchor-investor or other factual
+  assessment.
+- Prefer IPO Ji, SEBI/exchange disclosures, AMC/institutional sources and
+  reputable financial news.
+- Do not rely on anonymous social posts for investor reputation.
+- Do not fabricate a track record. If reputation evidence is weak, say so.
+- Keep research_notes concise and mention what was verified or unavailable.
+
+Return one recommendation for every IPO supplied.
 
 IPO DATA:
 {payload}
@@ -139,6 +159,7 @@ IPO DATA:
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=RECOMMENDATION_SCHEMA,
+                tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.2,
             ),
         )
@@ -193,6 +214,7 @@ USER QUESTION:
             model=MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.2,
             ),
         )
