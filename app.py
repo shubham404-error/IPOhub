@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 from datetime import datetime
+from textwrap import dedent
 
 import pandas as pd
 import streamlit as st
@@ -9,13 +10,14 @@ from collector import collect_once
 from config import DB_PATH
 from database import Database
 from ai_advisor import analyze_ipos, chat_with_advisor, get_gemini_api_key
+from allotment_engine import build_category_plans, optimise
 
 
 st.set_page_config(
     page_title="IPO Intelligence",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ---------- UI styling ----------
@@ -41,16 +43,7 @@ button, input, textarea, select {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
-/* Mobile-first navigation */
-.mobile-nav {
-    position: relative;
-    z-index: 2;
-    padding: 0.45rem 0 0.65rem;
-    margin-bottom: 0.35rem;
-    background: rgba(11, 13, 16, 0.96);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-}
+/* Navigation lives in Streamlit's sidebar. The main content stays clean on mobile. */
 
 /* Discovery cards */
 .ipo-card-title {
@@ -129,6 +122,16 @@ button, input, textarea, select {
     padding: 0.35rem 0.55rem;
 }
 
+
+.alloc-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin:.4rem 0 1rem; }
+.alloc-card, .strategy-row, .alloc-result { border:1px solid rgba(255,255,255,.10); border-radius:14px; background:rgba(255,255,255,.025); padding:.9rem; }
+.alloc-label { font-size:.68rem; opacity:.62; letter-spacing:.05em; }
+.alloc-big { font-size:1.15rem; font-weight:800; margin:.35rem 0; }
+.alloc-source { font-size:.66rem; margin-top:.5rem; opacity:.5; }
+.alloc-result { margin:.6rem 0 1rem; text-align:center; }
+.alloc-result-number { font-size:2.35rem; font-weight:850; line-height:1.1; margin:.2rem 0; }
+.strategy-row { display:flex; justify-content:space-between; align-items:center; margin:.55rem 0; gap:1rem; }
+
 @media (max-width: 480px) {
     /* Streamlit Cloud's mobile toolbar occupies the top of the viewport.
        Keep app content below it instead of letting the toolbar/ribbon cover the header. */
@@ -138,10 +141,10 @@ button, input, textarea, select {
         padding-right: 0.55rem;
     }
 
-    .mobile-nav {
-        position: relative !important;
-        top: auto !important;
-    }
+    .alloc-grid { grid-template-columns:1fr; }
+    .alloc-result-number { font-size:2rem; }
+    .strategy-row { padding:.8rem; }
+
     .ipo-card-title { font-size: 1.02rem; }
     .ipo-card-value { font-size: 1.08rem; }
     .ipo-metric-grid { gap: 1rem 0.85rem; }
@@ -412,7 +415,7 @@ def discovery_page(df):
             )
 
             with st.container(border=True):
-                card_html = f'''<div class="ipo-card-content">
+                card_html = dedent(f'''<div class="ipo-card-content">
                     <div class="ipo-card-title">{company}</div>
                     <div class="ipo-card-meta">{segment_name} · {status}</div>
                     {close_open_line}
@@ -434,7 +437,7 @@ def discovery_page(df):
                             <div class="ipo-card-value">{multiple(row.get("subscription"))}</div>
                         </div>
                     </div>
-                </div>'''
+                </div>''').strip()
                 st.markdown(card_html, unsafe_allow_html=True)
 
                 if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
@@ -518,101 +521,178 @@ def ai_analyst_page(df):
 
 # ---------- Page: Allotment Chances ----------
 
+def _application_subscription(row, category):
+    """Read IPO Ji application-wise subscription from the stored raw text."""
+    import json
+    import re
+
+    raw = row.get("raw_json")
+    if not raw or is_missing(raw):
+        return None
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        text = str(payload.get("subscription_text", ""))
+    except Exception:
+        return None
+    if not text:
+        return None
+
+    aliases = {
+        "retail": r"Retail",
+        "snii": r"(?:SNIIs?|sHNI|sNII)(?:\s*\([^)]*\))?",
+        "bnii": r"(?:BNIIs?|bHNI|bNII)(?:\s*\([^)]*\))?",
+    }
+    label = aliases.get(category)
+    if not label:
+        return None
+
+    # IPO Ji exposes two share-wise/application-wise tables. The final match
+    # for each category is the application-wise figure.
+    pattern = rf"{label}\s+(?:[\d,]+|-)\s+(?:[\d,]+|-)\s+([\d.]+)"
+    matches = re.findall(pattern, text, re.I)
+    if not matches:
+        return None
+    try:
+        return float(matches[-1])
+    except ValueError:
+        return None
+
+
+def _enrich_allotment_row(row):
+    row = dict(row)
+    for category in ("retail", "snii", "bnii"):
+        row[f"{category}_app_subscription"] = _application_subscription(row, category)
+    return row
+
+
 def allotment_page(df):
-    st.title("Allotment Chances")
-    st.caption("Estimate the chance of getting at least one retail allotment across multiple eligible accounts.")
+    st.title("Allotment Optimizer")
+    st.caption("Use your capital and eligible accounts to maximise the estimated chance of at least one allotment.")
 
     live = df[df["display_status"] == "Live"].copy()
-    candidates = live if not live.empty else df[df["display_status"] == "Upcoming"].copy()
+    mainboard = live[live["segment"].fillna("").str.contains("Mainboard", case=False, na=False)].copy()
 
-    if candidates.empty:
-        st.info("No IPOs are available for the calculator yet.")
+    if mainboard.empty:
+        st.info("No open Mainboard IPO is available for the optimizer right now.")
+        st.caption("SME IPOs use different application rules, so they are intentionally excluded rather than being modelled incorrectly.")
         return
 
-    candidates["label"] = candidates.apply(
-        lambda r: f"{clean_text(r.get('company_name')) or 'IPO'} · {normalized_status(r)}",
-        axis=1,
-    )
-
-    selected_label = st.selectbox("Select IPO", candidates["label"].tolist())
-    row = candidates[candidates["label"] == selected_label].iloc[0].to_dict()
+    labels = {
+        str(r["source_id"]): clean_text(r.get("company_name")) or "IPO"
+        for _, r in mainboard.iterrows()
+    }
+    selected_id = st.selectbox("IPO", list(labels.keys()), format_func=lambda x: labels[x])
+    row = _enrich_allotment_row(mainboard[mainboard["source_id"] == selected_id].iloc[0].to_dict())
 
     lot_size = None if is_missing(row.get("lot_size")) else int(float(row["lot_size"]))
     price = None if is_missing(row.get("price_high")) else float(row["price_high"])
-    retail_sub = None if is_missing(row.get("retail")) else float(row["retail"])
-
-    if lot_size and price:
-        retail_application = lot_size * price
-    else:
-        retail_application = None
-
-    st.markdown("### Your application setup")
-    c1, c2 = st.columns(2)
-    c3, _ = st.columns(2)
-    with c1:
-        capital = st.number_input("Capital available", min_value=0.0, value=200000.0, step=1000.0, format="%.0f")
-    with c2:
-        accounts = st.number_input("Eligible PAN / demat accounts", min_value=1, value=1, step=1)
-    with c3:
-        category = st.selectbox("Category", ["Retail", "sNII", "bNII"])
-
-    if category != "Retail":
-        st.markdown('<div class="calc-hero">', unsafe_allow_html=True)
-        st.markdown("**HNI categories work differently.** The simple lottery-style probability used for Retail should not be applied to sNII/bNII. We show the subscription-based allocation ratio as an indicator instead.")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        sub_col = {"sNII": "snii", "bNII": "bnii"}[category]
-        subscription = row.get(sub_col)
-        if is_missing(subscription) or float(subscription) <= 0:
-            st.warning(f"{category} subscription data is not available yet.")
-            return
-
-        allocation_ratio = min(1.0, 1.0 / float(subscription))
-        m1, m2, m3 = st.columns(3)
-        m1.metric(f"{category} subscription", multiple(subscription))
-        m2.metric("Indicative allocation ratio", f"{allocation_ratio * 100:.1f}%")
-        m3.metric("Capital entered", money(capital))
-        st.caption("This is an indicative allocation ratio, not a guaranteed allotment probability. Actual HNI allotment follows the issue's final basis of allotment.")
+    if not lot_size or not price:
+        st.warning("Price and lot size are required before a strategy can be calculated.")
         return
 
-    if retail_application is None or retail_application <= 0:
-        st.warning("Price band and lot size are required to calculate the Retail application amount.")
-        return
-
-    affordable_accounts = int(capital // retail_application)
-    applications_used = min(int(accounts), affordable_accounts)
-
-    st.markdown(f"**1 Retail application = {money(retail_application)}** at the upper price band.")
-
-    if retail_sub is None or retail_sub <= 0:
-        st.warning("Retail subscription data is not available yet, so the allotment chance cannot be estimated.")
-        return
-
-    # Simplified retail lottery estimator. For oversubscribed retail issues,
-    # one-lot-per-applicant probability is approximated as 1 / subscription.
-    if retail_sub <= 1:
-        per_account = 1.0
-    else:
-        per_account = min(1.0, 1.0 / retail_sub)
-
-    at_least_one = 1 - ((1 - per_account) ** applications_used) if applications_used else 0.0
-    expected = applications_used * per_account
-
-    st.markdown("### Estimated outcome")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Retail subscription", multiple(retail_sub))
-    m2.metric("Applications possible", applications_used)
-    m3.metric("Chance per account", f"{per_account * 100:.1f}%")
-    m4.metric("At least one allotment", f"{at_least_one * 100:.1f}%")
-
-    st.markdown("### What the calculator is doing")
-    st.write(
-        f"With {applications_used} independent eligible accounts, it estimates the chance of at least one allotment as "
-        f"1 − (1 − p)ⁿ, where p is approximated from the Retail subscription level."
+    lot_value = lot_size * price
+    st.markdown(
+        f"""<div class=\"calc-hero\">
+            <div style=\"font-size:1.05rem;font-weight:750\">{labels[selected_id]}</div>
+            <div class=\"small-note\">Mainboard · upper-band lot value {money(lot_value)} · Retail cap ₹2,00,000</div>
+        </div>""",
+        unsafe_allow_html=True,
     )
-    st.caption(
-        f"Expected allotments under this simplified model: {expected:.2f}. "
-        "This is an estimate, not a prediction of the exchange/registrar's final basis of allotment."
+
+    st.markdown("### 1. Tell us what you have")
+    capital = st.number_input(
+        "Total capital available (₹)",
+        min_value=0.0,
+        value=150000.0,
+        step=5000.0,
+        format="%.0f",
+    )
+    accounts = st.number_input(
+        "Eligible independent PAN / demat accounts",
+        min_value=1,
+        value=3,
+        step=1,
+    )
+
+    plans = build_category_plans(row, lot_size, price)
+    if not plans:
+        st.warning("Category demand data is not available yet. Refresh the IPO data and try again.")
+        return
+
+    st.markdown("### 2. Current competition")
+    demand_html = '<div class="alloc-grid">'
+    for p in plans:
+        chance = p.probability * 100
+        if chance >= 99.95:
+            chance_text = "Likely full allotment"
+        elif chance >= 10:
+            chance_text = f"~{chance:.1f}% / application"
+        else:
+            chance_text = f"~1 in {max(1, round(1 / p.probability)):,}"
+        source_label = "Application data" if p.source == "application subscription" else "Share-data proxy"
+        demand_html += f"""<div class=\"alloc-card\">
+            <div class=\"alloc-label\">{p.label.upper()}</div>
+            <div class=\"alloc-big\">{chance_text}</div>
+            <div class=\"small-note\">Min {money(p.min_amount)} · {p.min_lots} lot(s)</div>
+            <div class=\"alloc-source\">{source_label}</div>
+        </div>"""
+    demand_html += '</div>'
+    st.markdown(demand_html, unsafe_allow_html=True)
+
+    st.markdown("### 3. Recommended allocation")
+    result = optimise(plans, capital, int(accounts))
+    if not result or result["used_accounts"] == 0:
+        st.warning("Your capital is not enough for the minimum application available in this IPO.")
+        return
+
+    chance = result["chance"]
+    st.markdown(
+        f"""<div class=\"alloc-result\">
+            <div class=\"small-note\">ESTIMATED CHANCE OF AT LEAST ONE ALLOTMENT</div>
+            <div class=\"alloc-result-number\">{chance * 100:.1f}%</div>
+            <div class=\"small-note\">{result["used_accounts"]} of {int(accounts)} accounts used · {money(result["used_capital"])} of {money(capital)} allocated</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    recommendation = []
+    for p in plans:
+        n = result["counts"].get(p.key, 0)
+        if n:
+            recommendation.append((p, n))
+
+    for p, n in recommendation:
+        st.markdown(
+            f"""<div class=\"strategy-row\">
+                <div><b>{p.label}</b><div class=\"small-note\">{n} account(s) × {p.min_lots} lot(s)</div></div>
+                <div style=\"text-align:right\"><b>{money(n * p.min_amount)}</b><div class=\"small-note\">capital</div></div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    if result["unused_capital"] > 0:
+        st.info(
+            f"Keep {money(result['unused_capital'])} unallocated. For the chosen objective, putting more money into an existing account does not create another independent ticket."
+        )
+
+    st.markdown("### Why this model is different")
+    st.markdown(
+        "- **Retail:** focuses on the number of applicants, because oversubscribed retail allotment is lottery-based.\n"
+        "- **sNII / bNII:** treated as separate pools and separate minimum applications, not as a fake `1 ÷ subscription` return.\n"
+        "- **Multiple eligible accounts:** treated as independent applications only when you actually have separate eligible PAN/demat accounts.\n"
+        "- **Minimum application first:** if the goal is at least one allotment, putting extra lots into the same application is not automatically better than creating another eligible application."
+    )
+
+    with st.expander("Show the calculation"):
+        st.write(
+            "For each category, the model estimates the chance of a minimum-size application from application-wise subscription when available. "
+            "If a category is subscribed 20× by applications, the starting estimate is about 1/20 per eligible application. "
+            "For independent applications, the combined chance is 1 − ∏(1 − pᵢ)ⁿᵢ. The engine checks feasible combinations of categories, capital and accounts and chooses the highest modelled chance."
+        )
+        st.caption("This is an estimate, not a guarantee. Final allotment depends on valid applications and the registrar's final basis of allotment.")
+
+    st.warning(
+        "Refresh the IPO data before submitting applications. Subscription can change sharply during the final hours, and the model uses the latest stored snapshot available to the app."
     )
 
 
@@ -781,7 +861,7 @@ DISCOVERY_PAGE = st.Page(
 )
 ALLOTMENT_PAGE = st.Page(
     lambda: allotment_page(df),
-    title="Allotment Chances",
+    title="Allotment Optimizer",
     icon="🎯",
     url_path="allotment-chances",
 )
@@ -808,37 +888,13 @@ pages = [
 
 pg = st.navigation(pages, position="hidden")
 
-st.markdown('<div class="mobile-nav">', unsafe_allow_html=True)
-n1, n2 = st.columns(2)
-n3, n4 = st.columns(2)
-
-with n1:
-    if st.button("Discovery", use_container_width=True):
-        st.session_state.pop("selected_ipo", None)
-        st.switch_page(DISCOVERY_PAGE)
-
-with n2:
-    if st.button("Allotment", use_container_width=True):
-        st.session_state.pop("selected_ipo", None)
-        st.switch_page(ALLOTMENT_PAGE)
-
-with n3:
-    if st.button("AI Analyst", use_container_width=True):
-        st.switch_page(AI_ANALYST_PAGE)
-
-with n4:
-    if st.session_state.get("selected_ipo"):
-        if st.button("← Back", use_container_width=True):
-            st.session_state.pop("selected_ipo", None)
-            st.switch_page(DISCOVERY_PAGE)
-    else:
-        st.caption("IPO Intelligence")
-
-st.markdown("</div>", unsafe_allow_html=True)
-
 with st.sidebar:
     st.markdown("# IPO Intelligence")
     st.caption("Research, demand, and AI decision support")
+    st.markdown("### Navigation")
+    st.page_link(DISCOVERY_PAGE, label="Discovery", icon="🔎")
+    st.page_link(ALLOTMENT_PAGE, label="Allotment Optimizer", icon="🎯")
+    st.page_link(AI_ANALYST_PAGE, label="AI Analyst", icon="🤖")
     st.markdown("---")
     if st.button("Refresh data", use_container_width=True):
         try:
