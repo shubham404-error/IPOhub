@@ -92,7 +92,7 @@ class IPOJiClient:
 
     def _parse_card(self, text, url, company, collected_at):
         dates = re.search(
-            rf"(({MONTHS})\s+\d{{1,2}},\s+\d{{4}})\s*[–-]\s*(({MONTHS})\s+\d{{1,2}},\s+\d{{4}}))",
+            rf"((?:{MONTHS})\s+\d{{1,2}},\s+\d{{4}})\s*[–-]\s*((?:{MONTHS})\s+\d{{1,2}},\s+\d{{4}})",
             text,
             re.I,
         )
