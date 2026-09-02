@@ -43,9 +43,8 @@ button, input, textarea, select {
 
 /* Mobile-first navigation */
 .mobile-nav {
-    position: sticky;
-    top: 0;
-    z-index: 20;
+    position: relative;
+    z-index: 2;
     padding: 0.45rem 0 0.65rem;
     margin-bottom: 0.35rem;
     background: rgba(11, 13, 16, 0.96);
@@ -119,9 +118,17 @@ button, input, textarea, select {
 }
 
 @media (max-width: 480px) {
+    /* Streamlit Cloud's mobile toolbar occupies the top of the viewport.
+       Keep app content below it instead of letting the toolbar/ribbon cover the header. */
     .block-container {
+        padding-top: 4.75rem !important;
         padding-left: 0.55rem;
         padding-right: 0.55rem;
+    }
+
+    .mobile-nav {
+        position: relative !important;
+        top: auto !important;
     }
     .ipo-card-title { font-size: 1rem; }
     .ipo-card-value { font-size: 1.03rem; }
