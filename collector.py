@@ -127,7 +127,7 @@ class IPOJiClient:
             "segment": segment.group(1) if segment else None,
             "status": status.group(1) if status else None,
             "open_date": dates.group(1) if dates else None,
-            "close_date": dates.group(3) if dates else None,
+            "close_date": dates.group(2) if dates else None,
             "listing_date": None,
             "price_low": num(price.group(1)) if price else None,
             "price_high": num(price.group(2) or price.group(1)) if price else None,
