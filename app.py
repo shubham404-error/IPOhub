@@ -25,175 +25,97 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
-
-.stApp {
-    background: #0b0d10;
-}
-
+.stApp { background: #0b0d10; }
 .block-container {
-    max-width: 1440px;
-    padding-top: 1rem;
-    padding-bottom: 2.5rem;
-    padding-left: clamp(0.75rem, 2vw, 2rem);
-    padding-right: clamp(0.75rem, 2vw, 2rem);
+    max-width: 1100px;
+    padding: 0.75rem clamp(0.7rem, 2.5vw, 1.5rem) 3rem;
 }
-
-/* Compact global typography */
 h1 {
-    font-size: clamp(1.65rem, 3vw, 2.25rem) !important;
-    line-height: 1.1 !important;
+    font-size: clamp(1.55rem, 5vw, 2.25rem) !important;
+    line-height: 1.08 !important;
+    margin-bottom: 0.25rem !important;
 }
-h2 {
-    font-size: clamp(1.35rem, 2.5vw, 1.75rem) !important;
-}
-h3 {
-    font-size: clamp(1.05rem, 2vw, 1.3rem) !important;
-}
-
+h2 { font-size: clamp(1.25rem, 4vw, 1.7rem) !important; }
+h3 { font-size: clamp(1.05rem, 3.5vw, 1.3rem) !important; }
 button, input, textarea, select {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
-/* IPO card */
+/* Mobile-first navigation */
+.mobile-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 0.45rem 0 0.65rem;
+    margin-bottom: 0.35rem;
+    background: rgba(11, 13, 16, 0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Discovery cards */
 .ipo-card-title {
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.2;
-    margin-bottom: 0.18rem;
+    font-size: 1.05rem;
+    font-weight: 750;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin-bottom: 0.15rem;
 }
-
 .ipo-card-meta {
-    font-size: 0.74rem;
+    font-size: 0.75rem;
     line-height: 1.35;
-    opacity: 0.62;
+    opacity: 0.65;
 }
-
 .ipo-card-value {
-    font-size: 1.35rem;
-    font-weight: 500;
-    line-height: 1.15;
-    white-space: nowrap;
-    overflow: visible;
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
-
 .ipo-card-label {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     line-height: 1.1;
-    margin-bottom: 0.22rem;
-    opacity: 0.9;
+    margin-bottom: 0.18rem;
+    opacity: 0.62;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
-
 .ai-score-strip {
     border-top: 1px solid rgba(255,255,255,0.10);
-    margin-top: 0.65rem;
-    padding-top: 0.65rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
 }
-
 .calc-hero {
-    padding: 0.9rem 1rem;
+    padding: 0.85rem 0.9rem;
     border: 1px solid rgba(255,255,255,0.10);
     border-radius: 12px;
     background: rgba(255,255,255,0.025);
 }
+.small-note { font-size: 0.78rem; opacity: 0.65; }
 
-.small-note {
-    font-size: 0.78rem;
-    opacity: 0.65;
-}
-
-/* Streamlit metrics: smaller so price bands never get ellipsized */
 [data-testid="stMetricValue"] {
-    font-size: 1.28rem !important;
+    font-size: 1.12rem !important;
     line-height: 1.15 !important;
-    white-space: nowrap !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
 }
 [data-testid="stMetricLabel"] {
-    font-size: 0.72rem !important;
-}
-[data-testid="stMetricDelta"] {
     font-size: 0.68rem !important;
+    white-space: normal !important;
 }
+[data-testid="stMetricDelta"] { font-size: 0.66rem !important; }
+[data-testid="stVerticalBlock"] { gap: 0.45rem; }
 
-/* Buttons */
 .stButton > button {
-    min-height: 2.25rem;
-    border-radius: 8px;
+    width: 100%;
+    min-height: 2.65rem;
+    border-radius: 10px;
     font-size: 0.82rem;
-    padding: 0.25rem 0.55rem;
-}
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-    min-width: 250px;
-    max-width: 280px;
-}
-[data-testid="stSidebar"] .stButton > button {
-    min-height: 2.35rem;
-}
-
-/* Mobile */
-@media (max-width: 768px) {
-    .block-container {
-        padding-top: 0.65rem;
-        padding-left: 0.7rem;
-        padding-right: 0.7rem;
-        padding-bottom: 2rem;
-    }
-
-    [data-testid="stSidebar"] {
-        min-width: 0;
-        max-width: none;
-    }
-
-    .ipo-card-title {
-        font-size: 0.96rem;
-    }
-
-    .ipo-card-meta {
-        font-size: 0.7rem;
-    }
-
-    .ipo-card-value,
-    [data-testid="stMetricValue"] {
-        font-size: 1.08rem !important;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.66rem !important;
-    }
-
-    .stButton > button {
-        min-height: 2.15rem;
-        font-size: 0.76rem;
-    }
-
-    /* Let Streamlit columns breathe on narrow screens */
-    [data-testid="stHorizontalBlock"] {
-        gap: 0.45rem;
-    }
-
-    /* Reduce excessive vertical whitespace around cards */
-    [data-testid="stVerticalBlock"] {
-        gap: 0.35rem;
-    }
-}
-
-/* Mobile-first cards: keep content readable instead of squeezing six columns. */
-.ipo-card-title {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-}
-
-@media (max-width: 768px) {
-    .stButton > button {
-        width: 100%;
-        min-height: 2.55rem;
-        font-size: 0.82rem;
-    }
-
-    [data-testid="stMetricValue"] {
-        font-size: 1.05rem !important;
-    }
+    font-weight: 600;
+    padding: 0.35rem 0.55rem;
 }
 
 @media (max-width: 480px) {
@@ -201,20 +123,13 @@ button, input, textarea, select {
         padding-left: 0.55rem;
         padding-right: 0.55rem;
     }
-
-    .ipo-card-value,
-    [data-testid="stMetricValue"] {
-        font-size: 0.98rem !important;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.62rem !important;
-    }
-
+    .ipo-card-title { font-size: 1rem; }
+    .ipo-card-value { font-size: 1.03rem; }
+    [data-testid="stMetricValue"] { font-size: 1rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.62rem !important; }
     .stButton > button {
-        font-size: 0.72rem;
-        padding-left: 0.35rem;
-        padding-right: 0.35rem;
+        min-height: 2.55rem;
+        font-size: 0.78rem;
     }
 }
 </style>
@@ -410,12 +325,6 @@ def render_ai_score(score):
 # ---------- Page: Discovery ----------
 
 def discovery_page(df):
-    # Keep the detail flow inside the same Streamlit page. This avoids
-    # st.switch_page() issues with st.Page(lambda: ...) navigation.
-    if st.session_state.get("selected_ipo"):
-        ipo_detail_page(df)
-        return
-
     st.title("IPO Discovery")
     st.caption("Find open and upcoming IPOs, then use Ask AI for a quick evidence-based decision view.")
 
@@ -450,16 +359,19 @@ def discovery_page(df):
     upcoming_count = int((df["display_status"] == "Upcoming").sum())
     closed_count = int(df["display_status"].isin(["Closed", "Allotment Out", "Allotment Awaited"]).sum())
 
-    a, b, c, d = st.columns(4)
+    a, b = st.columns(2)
     a.metric("IPOs tracked", len(df))
     b.metric("Open now", live_count)
+    c, d = st.columns(2)
     c.metric("Upcoming", upcoming_count)
     d.metric("Closed / allotment", closed_count)
 
     def render_section(title, section_df):
         if section_df.empty:
             return
+
         st.markdown(f"### {title}")
+
         for _, row in section_df.iterrows():
             source_id = str(row["source_id"])
             company = clean_text(row.get("company_name")) or "Unknown IPO"
@@ -468,24 +380,41 @@ def discovery_page(df):
             score = st.session_state["ai_scores"].get(source_id)
 
             with st.container(border=True):
-                st.markdown(f'<div class="ipo-card-title">{company}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="ipo-card-meta">{segment_name} · {status}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="ipo-card-title">{company}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f'<div class="ipo-card-meta">{segment_name} · {status}</div>',
+                    unsafe_allow_html=True,
+                )
+
                 if status == "Live":
-                    st.markdown(f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>',
+                        unsafe_allow_html=True,
+                    )
                 elif status == "Upcoming":
-                    st.markdown(f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>',
+                        unsafe_allow_html=True,
+                    )
 
                 m1, m2 = st.columns(2)
                 with m1:
                     st.markdown(
-                        f'<div class="ipo-card-label">Price</div>'
+                        f'<div class="ipo-card-label">Price band</div>'
                         f'<div class="ipo-card-value">{price_band(row)}</div>',
                         unsafe_allow_html=True,
                     )
                 with m2:
-                    lot_value = f'{int(row["lot_size"]):,}' if not is_missing(row.get("lot_size")) else "—"
+                    lot_value = (
+                        f'{int(row["lot_size"]):,}'
+                        if not is_missing(row.get("lot_size"))
+                        else "—"
+                    )
                     st.markdown(
-                        f'<div class="ipo-card-label">Lot</div>'
+                        f'<div class="ipo-card-label">Lot size</div>'
                         f'<div class="ipo-card-value">{lot_value}</div>',
                         unsafe_allow_html=True,
                     )
@@ -508,12 +437,12 @@ def discovery_page(df):
                 with a1:
                     if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
                         ai_score_for_ipo(row)
-                        score = st.session_state["ai_scores"].get(source_id)
+                        st.rerun()
+
                 with a2:
                     if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
                         st.session_state["selected_ipo"] = source_id
-                        st.session_state["app_view"] = "ipo_detail"
-                        st.rerun()
+                        st.switch_page(IPO_DETAIL_PAGE)
 
                 if score:
                     st.markdown('<div class="ai-score-strip">', unsafe_allow_html=True)
@@ -521,7 +450,7 @@ def discovery_page(df):
                     risks = score.get("key_risks", [])
                     if risks:
                         st.caption("Risks: " + " · ".join(risks[:3]))
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
     render_section("Open now", view[view["display_status"] == "Live"])
     render_section("Upcoming", view[view["display_status"] == "Upcoming"])
@@ -699,14 +628,12 @@ def ipo_detail_page(df):
         st.error("The selected IPO could not be found.")
         if st.button("Back to Discovery", use_container_width=True):
             st.session_state.pop("selected_ipo", None)
-            st.session_state["app_view"] = "discovery"
-            st.rerun()
+            st.switch_page(DISCOVERY_PAGE)
         return
 
     if st.button("← Back to Discovery", use_container_width=True):
         st.session_state.pop("selected_ipo", None)
-        st.session_state["app_view"] = "discovery"
-        st.rerun()
+        st.switch_page(DISCOVERY_PAGE)
 
     st.markdown("---")
     st.title(clean_text(row.get("company_name")) or "IPO")
@@ -841,17 +768,76 @@ df["display_status"] = df.apply(normalized_status, axis=1)
 
 
 # ---------- Native Streamlit navigation ----------
+# Streamlit's recommended navigation model is used, but its sidebar menu is
+# hidden. The app supplies a mobile-first navigation bar using the exact Page
+# objects registered here. This makes programmatic navigation deterministic.
+DISCOVERY_PAGE = st.Page(
+    lambda: discovery_page(df),
+    title="Discovery",
+    icon="🔎",
+    url_path="discovery",
+    default=True,
+)
+ALLOTMENT_PAGE = st.Page(
+    lambda: allotment_page(df),
+    title="Allotment Chances",
+    icon="🎯",
+    url_path="allotment-chances",
+)
+AI_ANALYST_PAGE = st.Page(
+    lambda: ai_analyst_page(df),
+    title="AI Analyst",
+    icon="🤖",
+    url_path="ai-analyst",
+)
+IPO_DETAIL_PAGE = st.Page(
+    lambda: ipo_detail_page(df),
+    title="IPO Detail",
+    icon="📄",
+    url_path="ipo-detail",
+    visibility="hidden",
+)
 
 pages = [
-    st.Page(lambda: discovery_page(df), title="Discovery", icon="🔎", url_path="discovery", default=True),
-    st.Page(lambda: allotment_page(df), title="Allotment Chances", icon="🎯", url_path="allotment-chances"),
-    st.Page(lambda: ai_analyst_page(df), title="AI Analyst", icon="🤖", url_path="ai-analyst"),
-    st.Page(lambda: ipo_detail_page(df), title="IPO Detail", icon="📄", url_path="ipo-detail"),
+    DISCOVERY_PAGE,
+    ALLOTMENT_PAGE,
+    AI_ANALYST_PAGE,
+    IPO_DETAIL_PAGE,
 ]
 
-pg = st.navigation(pages, position="sidebar")
+pg = st.navigation(pages, position="hidden")
+
+st.markdown('<div class="mobile-nav">', unsafe_allow_html=True)
+n1, n2 = st.columns(2)
+n3, n4 = st.columns(2)
+
+with n1:
+    if st.button("Discovery", use_container_width=True):
+        st.session_state.pop("selected_ipo", None)
+        st.switch_page(DISCOVERY_PAGE)
+
+with n2:
+    if st.button("Allotment", use_container_width=True):
+        st.session_state.pop("selected_ipo", None)
+        st.switch_page(ALLOTMENT_PAGE)
+
+with n3:
+    if st.button("AI Analyst", use_container_width=True):
+        st.switch_page(AI_ANALYST_PAGE)
+
+with n4:
+    if st.session_state.get("selected_ipo"):
+        if st.button("← Back", use_container_width=True):
+            st.session_state.pop("selected_ipo", None)
+            st.switch_page(DISCOVERY_PAGE)
+    else:
+        st.caption("IPO Intelligence")
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 with st.sidebar:
+    st.markdown("# IPO Intelligence")
+    st.caption("Research, demand, and AI decision support")
     st.markdown("---")
     if st.button("Refresh data", use_container_width=True):
         try:
