@@ -59,7 +59,7 @@ button, input, textarea, select {
     line-height: 1.18;
     overflow-wrap: anywhere;
     word-break: break-word;
-    margin-bottom: 0.15rem;
+    margin: 0 0 0.22rem 0;
 }
 .ipo-card-meta {
     font-size: 0.75rem;
@@ -106,7 +106,19 @@ button, input, textarea, select {
     white-space: normal !important;
 }
 [data-testid="stMetricDelta"] { font-size: 0.66rem !important; }
-[data-testid="stVerticalBlock"] { gap: 0.45rem; }
+[data-testid="stVerticalBlock"] { gap: 0.7rem; }
+
+.ipo-card-content { width: 100%; min-width: 0; }
+.ipo-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem 1rem;
+    margin-top: 0.95rem;
+    width: 100%;
+}
+.ipo-metric { min-width: 0; }
+.ipo-card-label { display: block; margin: 0 0 0.28rem 0; }
+.ipo-card-value { display: block; margin: 0; }
 
 .stButton > button {
     width: 100%;
@@ -130,8 +142,9 @@ button, input, textarea, select {
         position: relative !important;
         top: auto !important;
     }
-    .ipo-card-title { font-size: 1rem; }
-    .ipo-card-value { font-size: 1.03rem; }
+    .ipo-card-title { font-size: 1.02rem; }
+    .ipo-card-value { font-size: 1.08rem; }
+    .ipo-metric-grid { gap: 1rem 0.85rem; }
     [data-testid="stMetricValue"] { font-size: 1rem !important; }
     [data-testid="stMetricLabel"] { font-size: 0.62rem !important; }
     .stButton > button {
@@ -386,70 +399,51 @@ def discovery_page(df):
             segment_name = clean_text(row.get("segment")) or "IPO"
             score = st.session_state["ai_scores"].get(source_id)
 
+            close_open_line = ""
+            if status == "Live":
+                close_open_line = f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>'
+            elif status == "Upcoming":
+                close_open_line = f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>'
+
+            lot_value = (
+                f'{int(row["lot_size"]):,}'
+                if not is_missing(row.get("lot_size"))
+                else "—"
+            )
+
             with st.container(border=True):
-                st.markdown(
-                    f'<div class="ipo-card-title">{company}</div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    f'<div class="ipo-card-meta">{segment_name} · {status}</div>',
-                    unsafe_allow_html=True,
-                )
+                card_html = f'''<div class="ipo-card-content">
+                    <div class="ipo-card-title">{company}</div>
+                    <div class="ipo-card-meta">{segment_name} · {status}</div>
+                    {close_open_line}
+                    <div class="ipo-metric-grid">
+                        <div class="ipo-metric">
+                            <div class="ipo-card-label">Price band</div>
+                            <div class="ipo-card-value">{price_band(row)}</div>
+                        </div>
+                        <div class="ipo-metric">
+                            <div class="ipo-card-label">Lot size</div>
+                            <div class="ipo-card-value">{lot_value}</div>
+                        </div>
+                        <div class="ipo-metric">
+                            <div class="ipo-card-label">GMP</div>
+                            <div class="ipo-card-value">{money(row.get("gmp"))}</div>
+                        </div>
+                        <div class="ipo-metric">
+                            <div class="ipo-card-label">Subscription</div>
+                            <div class="ipo-card-value">{multiple(row.get("subscription"))}</div>
+                        </div>
+                    </div>
+                </div>'''
+                st.markdown(card_html, unsafe_allow_html=True)
 
-                if status == "Live":
-                    st.markdown(
-                        f'<div class="ipo-card-meta">Closes {format_date(row.get("close_date"))}</div>',
-                        unsafe_allow_html=True,
-                    )
-                elif status == "Upcoming":
-                    st.markdown(
-                        f'<div class="ipo-card-meta">Opens {format_date(row.get("open_date"))}</div>',
-                        unsafe_allow_html=True,
-                    )
+                if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
+                    ai_score_for_ipo(row)
+                    st.rerun()
 
-                m1, m2 = st.columns(2)
-                with m1:
-                    st.markdown(
-                        f'<div class="ipo-card-label">Price band</div>'
-                        f'<div class="ipo-card-value">{price_band(row)}</div>',
-                        unsafe_allow_html=True,
-                    )
-                with m2:
-                    lot_value = (
-                        f'{int(row["lot_size"]):,}'
-                        if not is_missing(row.get("lot_size"))
-                        else "—"
-                    )
-                    st.markdown(
-                        f'<div class="ipo-card-label">Lot size</div>'
-                        f'<div class="ipo-card-value">{lot_value}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                m3, m4 = st.columns(2)
-                with m3:
-                    st.markdown(
-                        f'<div class="ipo-card-label">GMP</div>'
-                        f'<div class="ipo-card-value">{money(row.get("gmp"))}</div>',
-                        unsafe_allow_html=True,
-                    )
-                with m4:
-                    st.markdown(
-                        f'<div class="ipo-card-label">Subscription</div>'
-                        f'<div class="ipo-card-value">{multiple(row.get("subscription"))}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                a1, a2 = st.columns(2)
-                with a1:
-                    if st.button("Ask AI", key=f"ask_ai_{source_id}", use_container_width=True):
-                        ai_score_for_ipo(row)
-                        st.rerun()
-
-                with a2:
-                    if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
-                        st.session_state["selected_ipo"] = source_id
-                        st.switch_page(IPO_DETAIL_PAGE)
+                if st.button("View IPO", key=f"view_{source_id}", use_container_width=True):
+                    st.session_state["selected_ipo"] = source_id
+                    st.switch_page(IPO_DETAIL_PAGE)
 
                 if score:
                     st.markdown('<div class="ai-score-strip">', unsafe_allow_html=True)
